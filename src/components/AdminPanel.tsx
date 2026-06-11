@@ -53,6 +53,260 @@ export default function AdminPanel({ currentAdmin, onClose, toast, onUpdatePlatf
   const [newAdminPhone, setNewAdminPhone] = useState('');
   const [newAdminPass, setNewAdminPass] = useState('');
 
+  // Super Admin Control states
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserPhone, setNewUserPhone] = useState('');
+  const [newUserPass, setNewUserPass] = useState('');
+  const [newUserBalance, setNewUserBalance] = useState('0');
+  const [newUserVip, setNewUserVip] = useState(0);
+
+  // Manual Transaction states
+  const [newTxDesc, setNewTxDesc] = useState('');
+  const [newTxAmount, setNewTxAmount] = useState('');
+  const [newTxType, setNewTxType] = useState<'recharge' | 'withdraw' | 'profit' | 'bonus' | 'adjust'>('adjust');
+  const [newTxStatus, setNewTxStatus] = useState<'pending' | 'completed' | 'rejected'>('completed');
+
+  // Dynamic VIP Plan states
+  const [showCreateVipForm, setShowCreateVipForm] = useState(false);
+  const [newVipLevel, setNewVipLevel] = useState<number>(0);
+  const [newVipName, setNewVipName] = useState('');
+  const [newVipCost, setNewVipCost] = useState<number>(0);
+  const [newVipProfit, setNewVipProfit] = useState<number>(0);
+  const [newVipDays, setNewVipDays] = useState<number>(30);
+  const [newVipEmoji, setNewVipEmoji] = useState('💎');
+  const [newVipImage, setNewVipImage] = useState('');
+
+  // Super Admin functions
+  const handleCreateUserManual = async (e: FormEvent) => {
+    e.preventDefault();
+    const cleanPhone = newUserPhone.replace(/\D/g, '');
+    if (!newUserName.trim() || cleanPhone.length < 9 || !newUserPass.trim()) {
+      toast('Por favor, preencha todos os campos do utilizador.', 'error');
+      return;
+    }
+
+    if (PersistenceManager.getUserByPhone(cleanPhone)) {
+      toast('Já existe um utilizador registado com esse número de telefone.', 'error');
+      return;
+    }
+
+    const pwHash = await hashPassword(newUserPass);
+    const referralCode = 'REF' + Math.floor(100000 + Math.random() * 900000);
+
+    const initialBal = parseFloat(newUserBalance) || 0;
+
+    const newUserObj: User = {
+      id: generateUUID(),
+      name: newUserName.trim(),
+      phone: cleanPhone,
+      passwordHash: pwHash,
+      balance: initialBal,
+      rechargeTotal: initialBal,
+      vipLevel: newUserVip,
+      totalProfit: 0,
+      referralCode,
+      referredBy: '',
+      firstDepositDone: initialBal > 0,
+      team: [],
+      transactions: initialBal > 0 ? [{
+        id: generateUUID(),
+        type: 'adjust',
+        desc: 'Saldo inicial creditado pelo Super Administrador',
+        amount: initialBal,
+        status: 'completed',
+        date: new Date().toISOString()
+      }] : [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isBlocked: false,
+      vipActivatedAt: newUserVip > 0 ? new Date().toISOString() : null,
+      lastWithdrawTs: null,
+      lastCollectDate: null
+    };
+
+    PersistenceManager.saveUser(newUserObj);
+    PersistenceManager.writeAuditLog(currentAdmin.id, newUserObj.id, 'admin_create_user_manual', {
+      name: newUserObj.name,
+      phone: newUserObj.phone,
+      balance: newUserObj.balance,
+      vipLevel: newUserObj.vipLevel
+    });
+
+    toast(`Utilizador ${newUserObj.name} criado manualmente no sistema!`, 'success');
+    
+    // Clear states
+    setNewUserName('');
+    setNewUserPhone('');
+    setNewUserPass('');
+    setNewUserBalance('0');
+    setNewUserVip(0);
+    setShowCreateUserModal(false);
+    reloadData();
+    onUpdatePlatform();
+  };
+
+  const handleDeleteUserManual = (phone: string) => {
+    const user = PersistenceManager.getUserByPhone(phone);
+    if (!user) return;
+
+    const conf = confirm(`ATENÇÃO CRÍTICA: Deseja REALMENTE excluir permanentemente o utilizador ${user.name} (+258 ${user.phone})?\nEsta ação é irreversível e apagará todo o saldo e históricos dele do sistema!`);
+    if (!conf) return;
+
+    PersistenceManager.deleteUser(phone);
+    PersistenceManager.writeAuditLog(currentAdmin.id, user.id, 'admin_delete_user_permanent', {
+      name: user.name,
+      phone: user.phone
+    });
+
+    toast(`O utilizador ${user.name} foi apagado do sistema permanentemente!`, 'success');
+    setSelectedUserPhone(null);
+    setActiveTab('users');
+    reloadData();
+    onUpdatePlatform();
+  };
+
+  const handleAddTransactionManual = (phone: string) => {
+    const user = PersistenceManager.getUserByPhone(phone);
+    if (!user) return;
+
+    if (!newTxDesc.trim() || isNaN(parseFloat(newTxAmount))) {
+      toast('Descrição e montante são obrigatórios.', 'error');
+      return;
+    }
+
+    const tAmount = parseFloat(newTxAmount);
+    
+    const newTx: Transaction = {
+      id: generateUUID(),
+      type: newTxType,
+      desc: newTxDesc.trim(),
+      amount: tAmount,
+      status: newTxStatus,
+      date: new Date().toISOString()
+    };
+
+    if (!user.transactions) {
+      user.transactions = [];
+    }
+
+    user.transactions.push(newTx);
+
+    if (newTxStatus === 'completed') {
+      user.balance += tAmount;
+      if (newTxType === 'recharge') {
+        user.rechargeTotal = (user.rechargeTotal || 0) + tAmount;
+      } else if (newTxType === 'profit') {
+        user.totalProfit += tAmount;
+      }
+    }
+
+    PersistenceManager.saveUser(user);
+    PersistenceManager.writeAuditLog(currentAdmin.id, user.id, 'admin_add_transaction_manual', {
+      txDesc: newTxDesc,
+      txAmount: tAmount,
+      txType: newTxType,
+      txStatus: newTxStatus
+    });
+
+    toast(`Transação manual lançada para o utilizador com sucesso!`, 'success');
+    setNewTxDesc('');
+    setNewTxAmount('');
+    reloadData();
+    onUpdatePlatform();
+  };
+
+  const handleDeleteTransaction = (phone: string, txId: string) => {
+    const user = PersistenceManager.getUserByPhone(phone);
+    if (!user) return;
+
+    const txIndex = user.transactions.findIndex(t => t.id === txId);
+    if (txIndex === -1) return;
+
+    const tx = user.transactions[txIndex];
+    const conf = confirm(`Deseja realmente apagar a transação "${tx.desc}" (MZN ${fmt(tx.amount)})?\nNota: O saldo dele não será estornado automaticamente. Se houver divergência, acerte o saldo dele manualmente.`);
+    if (!conf) return;
+
+    user.transactions.splice(txIndex, 1);
+    PersistenceManager.saveUser(user);
+
+    PersistenceManager.writeAuditLog(currentAdmin.id, user.id, 'admin_delete_transaction', {
+      txId,
+      txDesc: tx.desc,
+      txAmount: tx.amount
+    });
+
+    toast('Transação removida com êxito.', 'info');
+    reloadData();
+    onUpdatePlatform();
+  };
+
+  const handleAddNewVipPlan = (e: FormEvent) => {
+    e.preventDefault();
+    if (newVipLevel <= 0 || !newVipName.trim() || newVipCost <= 0 || newVipProfit <= 0) {
+      toast('Preencha os dados obrigatórios do plano VIP.', 'error');
+      return;
+    }
+
+    const currentPlans = PersistenceManager.getVIPPlans();
+    if (currentPlans.some((p) => p.level === newVipLevel)) {
+      toast(`Já existe um de nível ${newVipLevel}.`, 'error');
+      return;
+    }
+
+    const newPlan: VIPPlan = {
+      level: newVipLevel,
+      name: newVipName.trim(),
+      dailyProfit: newVipProfit,
+      unlockCost: newVipCost,
+      emoji: newVipEmoji.trim() || '💎',
+      days: newVipDays,
+      rate: `${((newVipProfit / newVipCost) * 100).toFixed(1)}%/dia`,
+      color: '#c5a880',
+      image: newVipImage.trim() || 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&q=80'
+    };
+
+    const updatedPlans = [...currentPlans, newPlan].sort((a,b) => a.level - b.level);
+    PersistenceManager.saveVIPPlans(updatedPlans);
+    PersistenceManager.writeAuditLog(currentAdmin.id, null, 'admin_add_new_vip_plan', {
+      level: newVipLevel,
+      name: newVipName,
+      cost: newVipCost,
+      profit: newVipProfit
+    });
+
+    toast(`Novo plano VIP ${newVipName} (Nível ${newVipLevel}) inaugurado com sucesso!`, 'success');
+    setNewVipLevel(0);
+    setNewVipName('');
+    setNewVipCost(0);
+    setNewVipProfit(0);
+    setNewVipDays(30);
+    setNewVipEmoji('💎');
+    setNewVipImage('');
+    setShowCreateVipForm(false);
+    reloadData();
+    onUpdatePlatform();
+  };
+
+  const handleDeleteVipPlan = (level: number) => {
+    if (level === 0) {
+      toast('Não é possível apagar a base free (Nível 0).', 'error');
+      return;
+    }
+
+    const conf = confirm(`Tem certeza que quer DELETAR o plano VIP Nível ${level} permanently?\nClientes mantidos nesse nível não serão afetados, mas sairá da listagem de compras.`);
+    if (!conf) return;
+
+    let currentPlans = PersistenceManager.getVIPPlans();
+    currentPlans = currentPlans.filter((p) => p.level !== level);
+    PersistenceManager.saveVIPPlans(currentPlans);
+
+    PersistenceManager.writeAuditLog(currentAdmin.id, null, 'admin_delete_vip_plan', { level });
+    toast(`Plano VIP Nível ${level} deletado com êxito.`, 'info');
+    reloadData();
+    onUpdatePlatform();
+  };
+
   // Reload everything from local DB context
   const reloadData = () => {
     setUsers(PersistenceManager.getAllUsers());
@@ -850,9 +1104,109 @@ export default function AdminPanel({ currentAdmin, onClose, toast, onUpdatePlatf
 
           {activeTab === 'users' && (
             <div className="space-y-4">
-              <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-3">
+              <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-3 gap-3 flex-wrap">
                 <h3 className="font-serif italic text-lg text-[#e2cca8] tracking-widest">Controle de Utilizadores</h3>
+                {currentAdmin.role === 'super' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateUserModal(!showCreateUserModal)}
+                    className="bg-[#c5a880] hover:bg-[#a18863] text-black text-[10px] uppercase font-bold tracking-widest px-4 py-2.5 rounded-sm cursor-pointer transition-colors flex items-center gap-1.5 shadow-md"
+                  >
+                    <Plus size={13} /> Novo Utilizador Manual
+                  </button>
+                )}
               </div>
+
+              {/* Create User Manual Formulary */}
+              {currentAdmin.role === 'super' && showCreateUserModal && (
+                <motion.form 
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onSubmit={handleCreateUserManual}
+                  className="bg-[#050505] p-5 rounded-sm border border-[#c5a880]/30 space-y-4 shadow-xl text-[#E5E5E5]"
+                >
+                  <div className="flex items-center justify-between border-b border-white/15 pb-2.5">
+                    <h4 className="font-serif italic text-sm text-[#e2cca8] tracking-wider">Criar Novo Utilizador (Acesso Total)</h4>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowCreateUserModal(false)}
+                      className="text-white/40 hover:text-white p-1 hover:bg-white/5 rounded-sm cursor-pointer transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold tracking-[0.2em] text-white/40 mb-1">Nome Completo</label>
+                      <input 
+                        type="text"
+                        value={newUserName}
+                        onChange={(e) => setNewUserName(e.target.value)}
+                        placeholder="Nome fictício ou real"
+                        required
+                        className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-3.5 py-2.5 text-xs focus:outline-none focus:border-[#c5a880] text-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold tracking-[0.2em] text-white/40 mb-1">Celular (9 dígitos)</label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-xs font-mono border-r pr-2 leading-none border-white/10">+258</span>
+                        <input 
+                          type="tel"
+                          value={newUserPhone}
+                          onChange={(e) => setNewUserPhone(e.target.value)}
+                          placeholder="84XXXXXXX"
+                          maxLength={12}
+                          required
+                          className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm pl-16 pr-3 py-2.5 text-xs focus:outline-none focus:border-[#c5a880] text-white font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold tracking-[0.2em] text-white/40 mb-1">Senha Secreta</label>
+                      <input 
+                        type="password"
+                        value={newUserPass}
+                        onChange={(e) => setNewUserPass(e.target.value)}
+                        placeholder="Mínimo 6 caracteres"
+                        required
+                        className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-3.5 py-2.5 text-xs focus:outline-none focus:border-[#c5a880] text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold tracking-[0.2em] text-white/40 mb-1">Saldo Inicial (MZN)</label>
+                      <input 
+                        type="number"
+                        value={newUserBalance}
+                        onChange={(e) => setNewUserBalance(e.target.value)}
+                        placeholder="Ex: 500"
+                        className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-3.5 py-2.5 text-xs focus:outline-none focus:border-[#c5a880] text-emerald-400 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold tracking-[0.2em] text-white/40 mb-1">Nível VIP Inicial</label>
+                      <select 
+                        value={newUserVip}
+                        onChange={(e) => setNewUserVip(parseInt(e.target.value) || 0)}
+                        className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-3.5 py-2.5 text-xs focus:outline-none focus:border-[#c5a880] text-white font-mono cursor-pointer"
+                      >
+                        {vipPlans.map((v) => (
+                          <option key={v.level} value={v.level}>VIP {v.level} - {v.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <button 
+                        type="submit"
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-black text-[10px] font-bold tracking-widest uppercase py-3 rounded-sm transition-colors cursor-pointer"
+                      >
+                        ✔ Salvar e Registrar Utilizador
+                      </button>
+                    </div>
+                  </div>
+                </motion.form>
+              )}
 
               <div className="relative">
                 <input 
@@ -904,7 +1258,7 @@ export default function AdminPanel({ currentAdmin, onClose, toast, onUpdatePlatf
                   <h3 className="font-serif italic text-lg text-[#e2cca8] tracking-widest">{showSelectedUserDetail.name}</h3>
                   <p className="text-[10px] font-mono text-white/40 mt-1">+258 {showSelectedUserDetail.phone}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button 
                     type="button" 
                     onClick={() => handleToggleBlock(showSelectedUserDetail.phone)}
@@ -919,6 +1273,15 @@ export default function AdminPanel({ currentAdmin, onClose, toast, onUpdatePlatf
                   >
                     Resetar Ciclo 24h
                   </button>
+                  {currentAdmin.role === 'super' && (
+                    <button 
+                      type="button"
+                      onClick={() => handleDeleteUserManual(showSelectedUserDetail.phone)}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-sm text-[10px] tracking-widest uppercase font-black cursor-pointer transition-colors shadow-lg"
+                    >
+                      Excluir Conta Permanentemente
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1051,21 +1414,109 @@ export default function AdminPanel({ currentAdmin, onClose, toast, onUpdatePlatf
               </div>
 
               {/* Complete layout transaction logs */}
-              <div className="bg-[#050505] p-5 rounded-sm border border-white/10 mt-4">
-                <h4 className="font-serif italic text-[13px] text-[#e2cca8] tracking-wider mb-3 border-b border-white/5 pb-2 block">Histórico de Transações do Utilizador</h4>
+              <div className="bg-[#050505] p-5 rounded-sm border border-white/10 mt-4 text-[#e5e5e5]">
+                <div className="flex justify-between items-center mb-3 border-b border-white/5 pb-2">
+                  <h4 className="font-serif italic text-[13px] text-[#e2cca8] tracking-wider">Histórico de Transações do Utilizador</h4>
+                  <span className="text-[10px] text-white/40 font-mono">Qtd: {showSelectedUserDetail.transactions?.length || 0}</span>
+                </div>
+
+                {/* Form to insert manual transaction - Super Admin exclusive */}
+                {currentAdmin.role === 'super' && (
+                  <div className="bg-black/40 border border-[#c5a880]/15 p-4 rounded-sm mb-4 space-y-3">
+                    <h5 className="font-serif italic text-xs text-[#e2cca8] tracking-wide">Lançar Nova Transação Manual (Ajuste Direto)</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      <div>
+                        <label className="block text-[8px] uppercase tracking-widest text-[#e2cca8]/50 mb-1">Descrição do Lançamento</label>
+                        <input 
+                          type="text" 
+                          value={newTxDesc}
+                          onChange={(e) => setNewTxDesc(e.target.value)}
+                          placeholder="Ex: Bônus de Evento de Depósito"
+                          className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[8px] uppercase tracking-widest text-[#e2cca8]/50 mb-1">Montante (MZN)</label>
+                        <input 
+                          type="number" 
+                          value={newTxAmount}
+                          onChange={(e) => setNewTxAmount(e.target.value)}
+                          placeholder="Ex: 250 ou -100 (débito)"
+                          className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-2.5 py-1.5 text-xs font-mono text-emerald-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[8px] uppercase tracking-widest text-[#e2cca8]/50 mb-1">Tipo de Lançamento</label>
+                        <select 
+                          value={newTxType}
+                          onChange={(e: any) => setNewTxType(e.target.value)}
+                          className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-2 py-1.5 text-xs text-white cursor-pointer font-mono"
+                        >
+                          <option value="adjust">Ajuste Geral (adjust)</option>
+                          <option value="bonus">Bónus Oficial (bonus)</option>
+                          <option value="profit">Renda Diária (profit)</option>
+                          <option value="recharge">Recarga Manual (recharge)</option>
+                          <option value="withdraw">Levantamento (withdraw)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[8px] uppercase tracking-widest text-[#e2cca8]/50 mb-1">Status da Transação</label>
+                        <div className="flex gap-2">
+                          <select 
+                            value={newTxStatus}
+                            onChange={(e: any) => setNewTxStatus(e.target.value)}
+                            className="w-full bg-[#0d0d0d] border border-white/10 rounded-sm px-2 py-1.5 text-xs text-white cursor-pointer font-mono"
+                          >
+                            <option value="completed">Concluída (completed)</option>
+                            <option value="pending">Pendente (pending)</option>
+                            <option value="rejected">Rejeitada (rejected)</option>
+                          </select>
+                          <button 
+                            type="button" 
+                            onClick={() => handleAddTransactionManual(showSelectedUserDetail.phone)}
+                            className="bg-[#c5a880] hover:bg-[#a18863] text-black font-black text-[9px] uppercase px-3 py-1.5 rounded-sm cursor-pointer transition-colors"
+                          >
+                            Lançar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {showSelectedUserDetail.transactions?.length === 0 ? (
                   <div className="text-center py-6 text-white/30 text-xs font-mono">Utilizador sem transações registradas.</div>
                 ) : (
-                  <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1 no-scrollbar text-xs">
+                  <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1 no-scrollbar text-xs">
                     {showSelectedUserDetail.transactions.map((t) => (
-                      <div key={t.id} className="flex justify-between items-center p-3 rounded-sm bg-black border border-white/5">
-                        <div>
-                          <strong className="block text-white/80 font-mono text-xs">{t.desc}</strong>
-                          <span className="text-[10px] text-white/40 font-mono block mt-0.5">{new Date(t.date).toLocaleString('pt-MZ')}</span>
+                      <div key={t.id} className="flex justify-between items-center p-3 rounded-sm bg-black border border-white/5 gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <strong className="text-white/85 font-mono text-xs">{t.desc}</strong>
+                            <span className="text-[8px] font-mono tracking-widest font-bold uppercase border border-white/10 px-1 py-0.1 bg-white/5 rounded-sm">{t.type}</span>
+                            <span className={`text-[8px] font-mono tracking-widest font-bold uppercase rounded-sm px-1 ${
+                              t.status === 'completed' ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/10' :
+                              t.status === 'pending' ? 'text-amber-400 bg-amber-500/10 border border-amber-500/10' :
+                              'text-rose-400 bg-rose-500/10 border border-rose-500/10'
+                            }`}>{t.status}</span>
+                          </div>
+                          <span className="text-[10px] text-white/40 font-mono block mt-1">{new Date(t.date).toLocaleString('pt-MZ')}</span>
                         </div>
-                        <span className={`font-mono font-bold text-xs tracking-wide ${t.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {t.amount >= 0 ? '+' : ''}MZN {fmt(Math.abs(t.amount))}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className={`font-mono font-bold text-xs tracking-wide ${t.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {t.amount >= 0 ? '+' : ''}MZN {fmt(Math.abs(t.amount))}
+                          </span>
+                          {currentAdmin.role === 'super' && (
+                            <button 
+                              type="button" 
+                              onClick={() => handleDeleteTransaction(showSelectedUserDetail.phone, t.id)}
+                              className="text-rose-400 hover:text-rose-600 p-1.5 hover:bg-rose-500/10 rounded-sm cursor-pointer transition-colors"
+                              title="Remover Registro de Transação"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1177,9 +1628,109 @@ export default function AdminPanel({ currentAdmin, onClose, toast, onUpdatePlatf
 
               {/* VIP Levels parameters updates */}
               <div className="bg-[#050505] p-5 rounded-sm border border-white/10 space-y-4">
-                <h4 className="font-serif italic text-xs text-[#e2cca8] tracking-widest border-b border-white/5 pb-2 flex items-center gap-1.5">
-                  <Check size={14} className="text-[#e2cca8]" /> Tabela de Rendimento dos Planos VIP
-                </h4>
+                <div className="flex justify-between items-center border-b border-white/5 pb-2 flex-wrap gap-2">
+                  <h4 className="font-serif italic text-xs text-[#e2cca8] tracking-widest flex items-center gap-1.5">
+                    <Check size={14} className="text-[#e2cca8]" /> Tabela de Rendimento dos Planos VIP
+                  </h4>
+                  {currentAdmin.role === 'super' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateVipForm(!showCreateVipForm)}
+                      className="bg-[#c5a880] hover:bg-[#a18863] text-black text-[9px] uppercase font-bold tracking-widest px-3 py-1.5 rounded-sm cursor-pointer transition-all flex items-center gap-1"
+                    >
+                      <Plus size={11} /> Novo Plano VIP
+                    </button>
+                  )}
+                </div>
+
+                {currentAdmin.role === 'super' && showCreateVipForm && (
+                  <motion.form
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    onSubmit={handleAddNewVipPlan}
+                    className="bg-black/50 border border-[#c5a880]/35 p-4 rounded-sm space-y-3 shadow-xl text-[#e5e5e5]"
+                  >
+                    <h5 className="font-serif italic text-xs text-[#e2cca8] tracking-wider">Criar Novo Nível VIP Personalizado</h5>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[8px] uppercase font-bold tracking-widest text-white/40 mb-1">Nível VIP (Numérico)</label>
+                        <input
+                          type="number"
+                          value={newVipLevel || ''}
+                          onChange={(e) => setNewVipLevel(parseInt(e.target.value) || 0)}
+                          placeholder="Ex: 9"
+                          required
+                          className="bg-black border border-white/10 rounded-sm px-2.5 py-1.5 text-xs text-white font-mono w-full focus:outline-none focus:border-[#c5a880]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[8px] uppercase font-bold tracking-widest text-white/40 mb-1">Nome Editorial VIP</label>
+                        <input
+                          type="text"
+                          value={newVipName}
+                          onChange={(e) => setNewVipName(e.target.value)}
+                          placeholder="Ex: Titânio Imperial"
+                          required
+                          className="bg-black border border-white/10 rounded-sm px-2.5 py-1.5 text-xs text-white font-mono w-full focus:outline-none focus:border-[#c5a880]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[8px] uppercase font-bold tracking-widest text-white/40 mb-1">Custo de Desbloqueio</label>
+                        <input
+                          type="number"
+                          value={newVipCost || ''}
+                          onChange={(e) => setNewVipCost(parseFloat(e.target.value) || 0)}
+                          placeholder="Ex: 25000"
+                          required
+                          className="bg-black border border-white/10 rounded-sm px-2.5 py-1.5 text-xs text-emerald-400 font-mono w-full focus:outline-none focus:border-[#c5a880]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[8px] uppercase font-bold tracking-widest text-white/40 mb-1">Renda Diária (MZN)</label>
+                        <input
+                          type="number"
+                          value={newVipProfit || ''}
+                          onChange={(e) => setNewVipProfit(parseFloat(e.target.value) || 0)}
+                          placeholder="Ex: 1200"
+                          required
+                          className="bg-black border border-white/10 rounded-sm px-2.5 py-1.5 text-xs text-[#c5a880] font-mono w-full focus:outline-none focus:border-[#c5a880]"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[8px] uppercase font-bold tracking-widest text-white/40 mb-1">Dias de Duração</label>
+                        <input
+                          type="number"
+                          value={newVipDays}
+                          onChange={(e) => setNewVipDays(parseInt(e.target.value) || 30)}
+                          placeholder="Ex: 30"
+                          required
+                          className="bg-black border border-white/10 rounded-sm px-2.5 py-1.5 text-xs text-white font-mono w-full focus:outline-none focus:border-[#c5a880]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[8px] uppercase font-bold tracking-widest text-white/40 mb-1">Ícone Emoji</label>
+                        <input
+                          type="text"
+                          value={newVipEmoji}
+                          onChange={(e) => setNewVipEmoji(e.target.value)}
+                          placeholder="👑"
+                          className="bg-black border border-white/10 rounded-sm px-2.5 py-1.5 text-xs text-center font-mono w-full focus:outline-none focus:border-[#c5a880]"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          type="submit"
+                          className="w-full bg-emerald-500 hover:bg-emerald-600 text-black text-[9px] uppercase font-bold tracking-widest py-2.5 rounded-sm cursor-pointer transition-all"
+                        >
+                          ✔ Inaugurar VIP
+                        </button>
+                      </div>
+                    </div>
+                  </motion.form>
+                )}
+
                 <div className="text-[10px] text-white/40 leading-tight font-light">
                   Aviso: As alterações inseridas e gravadas abaixo entrarão em vigor imediatamente na vitrine de Planos para compra.
                 </div>
@@ -1250,7 +1801,16 @@ export default function AdminPanel({ currentAdmin, onClose, toast, onUpdatePlatf
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="flex justify-end gap-2.5">
+                        {currentAdmin.role === 'super' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteVipPlan(v.level)}
+                            className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-450 border border-rose-500/20 font-bold px-3 py-2 rounded-sm text-[10px] tracking-widest uppercase cursor-pointer transition-colors"
+                          >
+                            Excluir VIP {v.level}
+                          </button>
+                        )}
                         <button 
                           type="button" 
                           onClick={() => {

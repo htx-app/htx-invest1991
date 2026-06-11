@@ -8,9 +8,10 @@ import { PersistenceManager } from '../db';
 interface AuthScreenProps {
   onLoginSuccess: (user: User) => void;
   toast: (msg: string, type: 'success' | 'error' | 'info') => void;
+  onLogoTap?: () => void;
 }
 
-export default function AuthScreen({ onLoginSuccess, toast }: AuthScreenProps) {
+export default function AuthScreen({ onLoginSuccess, toast, onLogoTap }: AuthScreenProps) {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   
   // Login Form States
@@ -202,9 +203,13 @@ export default function AuthScreen({ onLoginSuccess, toast }: AuthScreenProps) {
         className="bg-[#0d0d0d] rounded-sm w-full max-w-sm overflow-hidden shadow-2xl p-6 border border-white/10"
       >
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-full border border-[#c5a880]/30 bg-[#c5a880]/5 text-[#e2cca8] flex items-center justify-center mx-auto mb-2 text-sm font-serif italic text-gold">
+          <button 
+            type="button"
+            onClick={onLogoTap}
+            className="w-12 h-12 rounded-full border border-[#c5a880]/30 bg-[#c5a880]/5 text-[#e2cca8] flex items-center justify-center mx-auto mb-2 text-sm font-serif italic text-gold cursor-pointer select-none hover:bg-[#c5a880]/10 active:scale-95 transition-all focus:outline-none"
+          >
             HTX
-          </div>
+          </button>
           <h1 className="text-xl font-serif italic text-white tracking-widest">HTX Investimentos</h1>
           <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Plataforma Exclusiva de Rendimento</p>
         </div>

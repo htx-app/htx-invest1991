@@ -561,6 +561,7 @@ export default function App() {
             localStorage.setItem('htx_active_user_phone', u.phone);
           }} 
           toast={showToast} 
+          onLogoTap={handleLogoTap}
         />
         
         {/* Modal Admin authentication trigger backdoor */}
@@ -1222,6 +1223,36 @@ export default function App() {
                 <div className="text-[9px] text-white/40 uppercase tracking-wider block leading-tight mt-1">Nome Beneficiário: <strong className="text-white/80">{config.emolaName}</strong></div>
               </div>
 
+              {/* Passo a Passo de Depósito */}
+              <div className="bg-black/40 border border-white/5 rounded-sm p-3.5 space-y-3">
+                <div className="flex items-center gap-1.5 border-b border-white/5 pb-1.5">
+                  <HelpCircle size={13} className="text-[#c5a880]" />
+                  <span className="text-[9px] uppercase tracking-wider text-white/85 font-mono font-bold">Instruções de Depósito Passo a Passo</span>
+                </div>
+                <div className="space-y-2 text-[10px] text-white/60 font-light leading-relaxed">
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">1</span>
+                    <p>Copie o número de telefone de transferência oficial <strong className="text-[#e2cca8]">{config.emolaNumber}</strong> acima.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">2</span>
+                    <p>Envie o montante que deseja carregar através da sua carteira móvel <strong>e-Mola</strong>.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">3</span>
+                    <p>Tire uma captura de tela (print-screen) do comprovativo da transferência efetuada.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">4</span>
+                    <p>Preencha os dados abaixo (valor enviado e o seu número) e anexe o comprovativo.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">5</span>
+                    <p>Submeta o formulário e aguarde a validação pelo nosso suporte (geralmente em menos de 30 minutos).</p>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[9px] uppercase tracking-[0.2em] text-white/40 mb-1 leading-none">Valor a Carregar (MZN)</label>
                 <input 
@@ -1314,6 +1345,32 @@ export default function App() {
                   <strong className="text-emerald-400 font-mono">
                     {withdrawAmt ? `MZN ${fmt(parseFloat(withdrawAmt) - parseFloat(withdrawAmt) * (config.withdrawDiscountPct / 100))}` : `MZN 0,00`}
                   </strong>
+                </div>
+              </div>
+
+              {/* Instruções de Levantamento */}
+              <div className="bg-black/40 border border-white/5 rounded-sm p-3.5 space-y-3">
+                <div className="flex items-center gap-1.5 border-b border-white/5 pb-1.5">
+                  <Info size={13} className="text-[#c5a880]" />
+                  <span className="text-[9px] uppercase tracking-wider text-white/85 font-mono font-bold">Instruções de Levantamento</span>
+                </div>
+                <div className="space-y-2 text-[10px] text-white/60 font-light leading-relaxed">
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-rose-500/15 border border-rose-500/20 rounded-full flex items-center justify-center text-[9px] text-rose-400 font-bold shrink-0 font-mono">1</span>
+                    <p>O prazo padrão de liquidação de fundos é de <strong>2 a 24 horas úteis</strong> (Segunda a Sexta-feira).</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">2</span>
+                    <p>Os levantamentos são dirigidos exclusivamente à sua conta móvel do <strong>M-Pesa Moçambique</strong>.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">3</span>
+                    <p>Certifique-se de preencher o número de destinatário ativo e registrado com o seu nome para evitar estornos automáticos.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="w-4 h-4 bg-[#c5a880]/15 border border-[#c5a880]/20 rounded-full flex items-center justify-center text-[9px] text-[#e2cca8] font-bold shrink-0 font-mono">4</span>
+                    <p>Uma taxa administrativa corporativa de <strong>{config.withdrawDiscountPct}%</strong> do montante é retida pelo gateway transacional.</p>
+                  </div>
                 </div>
               </div>
 
@@ -1505,6 +1562,66 @@ export default function App() {
                 </button>
               </div>
             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Admin authentication trigger backdoor */}
+      <AnimatePresence>
+        {showAdminAuth && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[999] flex items-center justify-center p-4">
+            <motion.form 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.95 }}
+              onSubmit={handleAdminAuth}
+              className="bg-[#0d0d0d] border border-white/10 p-6 rounded-sm w-full max-w-sm text-white space-y-4 shadow-2xl"
+            >
+              <div>
+                <h3 className="font-serif italic text-base tracking-widest text-[#e2cca8]">🔑 ACESSO RESTRITO</h3>
+                <p className="text-[10px] text-white/40 uppercase tracking-widest leading-tight mt-1">Canal de segurança exclusivo para funcionários da rede HTX Moçambique.</p>
+              </div>
+
+              <div>
+                <label className="block text-[9px] uppercase tracking-[0.2em] text-white/40 mb-1 leading-none">Telefone Admin (sem +258)</label>
+                <input 
+                  type="tel" 
+                  value={adminPhone} 
+                  onChange={(e) => setAdminPhone(e.target.value)}
+                  placeholder="84XXXXXXX" 
+                  required 
+                  className="w-full bg-[#050505] border border-white/10 rounded-sm px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-[#c5a880]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[9px] uppercase tracking-[0.2em] text-white/40 mb-1 leading-none">Senha Secreta</label>
+                <input 
+                  type="password" 
+                  value={adminPass} 
+                  onChange={(e) => setAdminPass(e.target.value)}
+                  placeholder="Senha de acesso corporativa" 
+                  required 
+                  className="w-full bg-[#050505] border-[#c5a880]/30 rounded-sm px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#c5a880]"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button 
+                  type="submit" 
+                  className="bg-[#c5a880] hover:bg-[#a18863] text-black text-xs font-bold tracking-widest uppercase py-3 rounded-sm cursor-pointer flex-1 transition-colors"
+                >
+                  Entrar
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => { setShowAdminAuth(false); showToast('Login cancelado', 'info'); }}
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-xs font-bold tracking-widest uppercase py-3 rounded-sm cursor-pointer transition-colors px-4"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.form>
           </div>
         )}
       </AnimatePresence>
