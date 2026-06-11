@@ -1,0 +1,6 @@
+{
+  "name": "HTX Plataforma de Investimento",
+  "description": "Uma plataforma de simulação de investimentos digitais de alta performance com interface moderna, planos VIP, recargas e retiradas, e painel de administração completo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
